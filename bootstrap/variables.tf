@@ -1,0 +1,16 @@
+variable "aws_region" {
+  description = "AWS region to deploy bootstrap resources"
+  type        = string
+  default     = "ap-south-2"
+}
+
+variable "account_id" {
+  description = "AWS account ID — used to ensure globally unique S3 bucket name"
+  type        = string
+}
+
+variable "github_repo" {
+  description = "GitHub repo in owner/name format — scopes OIDC trust to this repo"
+  type        = string
+  default     = "ibraheemcisse/aws-terraform-platform"
+}
