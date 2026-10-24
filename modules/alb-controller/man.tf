@@ -85,7 +85,7 @@ resource "helm_release" "alb_controller" {
   }
   set {
     name  = "region"
-    value = "us-east-1"
+    value = "ap-south-2"
   }
 
   depends_on = [

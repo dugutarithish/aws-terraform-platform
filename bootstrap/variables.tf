@@ -12,5 +12,5 @@ variable "account_id" {
 variable "github_repo" {
   description = "GitHub repo in owner/name format — scopes OIDC trust to this repo"
   type        = string
-  default     = "ibraheemcisse/aws-terraform-platform"
+  default     = "dugutarithish/aws-terraform-platform"
 }
