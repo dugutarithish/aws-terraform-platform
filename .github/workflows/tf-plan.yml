@@ -1,0 +1,108 @@
+name: Terraform Plan
+
+on:
+    pull_request:
+        branches:
+            - main
+        paths:
+            - "envs/**"
+            - "modules/**"
+    workflow_dispatch:
+
+permissions:
+    id-token: write
+    contents: read
+    pull-requests: write
+
+env:
+    TF_VERSION: "1.9.0"
+    AWS_REGION: "us-east-1"
+    ROLE_ARN: ${{ vars.AWS_TERRAFORM_ROLE_ARN }}
+
+jobs:
+    plan-dev:
+        name: Terraform Plan - Dev
+        runs-on: ubuntu-latest
+
+        defaults:
+            run:
+                working-directory: envs/dev
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Configure AWS credentials via OIDC
+              uses: aws-actions/configure-aws-credentials@v4
+              with:
+                  role-to-assume: ${{ env.ROLE_ARN }}
+                  aws-region: ${{ env.AWS_REGION }}
+
+            - name: Verify AWS identity
+              run: aws sts get-caller-identity
+
+            - name: Setup Terraform
+              uses: hashicorp/setup-terraform@v3
+              with:
+                  terraform_version: ${{ env.TF_VERSION }}
+
+            - name: Terraform Format Check
+              run: terraform fmt -check -recursive ../..
+
+            - name: Terraform Init
+              run: terraform init -input=false
+
+            - name: Terraform Validate
+              run: terraform validate
+
+            - name: Terraform Plan
+              id: plan
+              continue-on-error: true
+              run: |
+                  set -o pipefail
+                  terraform plan -input=false -no-color 2>&1 | tee plan_output.txt
+
+            - name: Post Terraform Plan to Pull Request
+              if: always() && github.event_name == 'pull_request'
+              uses: actions/github-script@v7
+              env:
+                  PLAN_OUTCOME: ${{ steps.plan.outcome }}
+              with:
+                  script: |
+                      const fs = require('fs');
+                      const path = 'envs/dev/plan_output.txt';
+
+                      let output = 'Terraform plan output was not generated.';
+
+                      if (fs.existsSync(path)) {
+                        output = fs.readFileSync(path, 'utf8');
+                      }
+
+                      const status =
+                        process.env.PLAN_OUTCOME === 'success'
+                          ? 'SUCCESS'
+                          : 'FAILED';
+
+                      const maxLength = 50000;
+                      if (output.length > maxLength) {
+                        output =
+                          output.substring(0, maxLength) +
+                          '\n\n... Output truncated. Check the GitHub Actions logs.';
+                      }
+
+                      const body =
+                        `## Terraform Plan — Dev: ${status}\n\n` +
+                        '```text\n' +
+                        output +
+                        '\n```';
+
+                      await github.rest.issues.createComment({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        issue_number: context.issue.number,
+                        body
+                      });
+
+            - name: Fail workflow if Terraform Plan failed
+              if: steps.plan.outcome != 'success'
+              run: exit 1
